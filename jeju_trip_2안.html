@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>제주 여행 일정 (2안)</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700;800&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { font-family: 'Noto Sans KR', sans-serif; background: #f0f2f5; color: #333; line-height: 1.6; }
+
+  /* ── 상단 고정 헤더 ── */
+  .top-bar {
+    position: sticky; top: 0; z-index: 1000;
+    background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    padding: 12px 16px 0;
+  }
+  .top-title {
+    text-align: center; font-size: 16px; font-weight: 800; color: #2c3e50;
+    margin-bottom: 2px;
+  }
+  .top-sub {
+    text-align: center; font-size: 11px; color: #999; margin-bottom: 10px;
+  }
+
+  /* 일차 탭 */
+  .day-tabs {
+    display: flex; justify-content: center; gap: 0; border-bottom: none;
+  }
+  .day-tab {
+    flex: 1; max-width: 140px;
+    padding: 10px 0; border: none; background: none;
+    font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 700;
+    color: #aaa; cursor: pointer; transition: all 0.2s;
+    border-bottom: 3px solid transparent; text-align: center;
+  }
+  .day-tab.active { border-bottom-color: #3498db; color: #3498db; }
+  .day-tab[data-day="2"].active { border-bottom-color: #e74c3c; color: #e74c3c; }
+  .day-tab[data-day="3"].active { border-bottom-color: #27ae60; color: #27ae60; }
+
+  /* 시간표/지도 전환 */
+  .view-toggle {
+    display: flex; justify-content: center; gap: 0;
+    padding: 10px 16px 0; background: #f8f9fa;
+  }
+  .view-btn {
+    padding: 8px 24px; border: 1.5px solid #ddd; background: #fff;
+    font-family: 'Noto Sans KR', sans-serif; font-size: 13px; font-weight: 600;
+    color: #888; cursor: pointer; transition: all 0.2s;
+  }
+  .view-btn:first-child { border-radius: 20px 0 0 20px; border-right: none; }
+  .view-btn:last-child { border-radius: 0 20px 20px 0; }
+  .view-btn.active { background: #2c3e50; color: #fff; border-color: #2c3e50; }
+
+  /* ── 메인 콘텐츠 ── */
+  .content-area { padding: 12px 12px 80px; }
+
+  /* 시간표 */
+  .timetable-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .timetable { width: 100%; border-collapse: separate; border-spacing: 0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.08); min-width: 520px; }
+  .timetable thead th { padding: 12px 8px; font-size: 13px; font-weight: 700; color: #fff; text-align: center; }
+  .timetable thead.c1 th { background: #3498db; }
+  .timetable thead.c2 th { background: #e74c3c; }
+  .timetable thead.c3 th { background: #27ae60; }
+  .timetable tbody td { padding: 10px 8px; font-size: 12px; text-align: center; border-bottom: 1px solid #eee; vertical-align: middle; }
+  .timetable tbody tr:last-child td { border-bottom: none; }
+  .timetable tbody tr:nth-child(odd) { background: #fff; }
+  .timetable tbody tr:nth-child(even) { background: #fafbfc; }
+  .timetable tbody tr.mv { background: #f7f9fa; }
+  .timetable tbody tr.mv td { color: #95a5a6; font-size: 11px; }
+  .timetable tbody tr.hl { background: #fff9e6; }
+  .timetable td.pl { font-weight: 600; text-align: left; padding-left: 12px; }
+  .timetable td.ct { text-align: left; padding-left: 12px; }
+  .timetable td.tc { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+  .cb { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; color: #fff; }
+  .c-mv { background: #bdc3c7; color: #666; }
+  .c-fd { background: #27ae60; }
+  .c-cf { background: #8e44ad; }
+  .c-sp { background: #e67e22; }
+  .c-tr { background: #2980b9; }
+  .c-st { background: #f39c12; }
+  .c-ex { background: #e74c3c; }
+  .c-hk { background: #16a085; }
+
+  .nl { display: inline-block; padding: 3px 7px; background: #1ec800; color: #fff; border-radius: 6px; text-decoration: none; font-size: 10px; font-weight: 600; }
+
+  /* 지도 */
+  .map-area { display: none; }
+  .map-area.show { display: block; }
+  .leaflet-map { width: 100%; height: calc(100vh - 200px); min-height: 350px; border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); z-index: 1; }
+
+  .route-card { background: #fff; border-radius: 12px; padding: 14px 16px; box-shadow: 0 3px 12px rgba(0,0,0,0.06); margin-top: 12px; }
+  .route-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+  .route-steps { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+  .route-step { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 16px; font-size: 11px; font-weight: 600; color: #fff; }
+  .route-step .num { width: 18px; height: 18px; border-radius: 50%; background: rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; }
+  .route-arrow { font-size: 12px; color: #bbb; }
+  .mt-badge { font-size: 9px; color: #999; padding: 2px 6px; background: #f5f5f5; border-radius: 8px; }
+
+  /* Leaflet 마커/라벨 */
+  .num-marker { display: flex; align-items: center; justify-content: center; border-radius: 50%; color: #fff; font-weight: 800; border: 3px solid #fff; box-shadow: 0 3px 10px rgba(0,0,0,0.35); font-family: 'Noto Sans KR', sans-serif; }
+  .num-marker.sm { width: 28px; height: 28px; font-size: 12px; }
+  .num-marker.lg { width: 36px; height: 36px; font-size: 15px; border-width: 3.5px; }
+  .leader-label { display: inline-block; padding: 3px 8px; border-radius: 8px; font-size: 11px; font-weight: 700; white-space: nowrap; font-family: 'Noto Sans KR', sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,0.1); line-height: 1.3; }
+  .leaflet-popup-content-wrapper { border-radius: 12px !important; }
+  .leaflet-popup-content { margin: 12px 14px !important; font-family: 'Noto Sans KR', sans-serif !important; line-height: 1.5 !important; }
+  .popup-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .popup-desc { font-size: 12px; color: #666; }
+  .popup-time { font-size: 11px; color: #999; margin-top: 3px; }
+  .popup-link { display: inline-block; margin-top: 6px; padding: 4px 12px; background: #03c75a; color: #fff; font-size: 11px; font-weight: 600; border-radius: 14px; text-decoration: none; }
+  .legend-box { background: #fff; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); font-size: 10px; line-height: 1.8; }
+  .legend-box h4 { font-size: 11px; font-weight: 700; margin-bottom: 2px; }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; }
+
+  /* 시간표 숨기기 */
+  .table-area { display: none; }
+  .table-area.show { display: block; }
+
+  @media (min-width: 768px) {
+    .leaflet-map { height: 550px; }
+    .content-area { max-width: 900px; margin: 0 auto; padding: 16px 20px 80px; }
+    .day-tab { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 상단 고정 -->
+<div class="top-bar">
+  <div class="top-title">제주 여행 일정</div>
+  <div class="top-sub">4/18(토) ~ 4/20(월) · 2박 3일</div>
+  <div class="day-tabs">
+    <button class="day-tab active" data-day="1" onclick="switchDay(1)">DAY 1 · 토</button>
+    <button class="day-tab" data-day="2" onclick="switchDay(2)">DAY 2 · 일</button>
+    <button class="day-tab" data-day="3" onclick="switchDay(3)">DAY 3 · 월</button>
+  </div>
+</div>
+
+<div class="view-toggle">
+  <button class="view-btn active" onclick="switchView('table')">시간표</button>
+  <button class="view-btn" onclick="switchView('map')">지도</button>
+</div>
+
+<div class="content-area">
+
+<!-- ═══ 시간표 ═══ -->
+<div class="table-area show" id="table1">
+  <div class="timetable-wrap">
+    <table class="timetable"><thead class="c1">
+      <tr><th style="width:16%">시간</th><th style="width:20%">장소</th><th style="width:32%">내용</th><th style="width:12%">분류</th><th style="width:20%">지도</th></tr>
+    </thead><tbody>
+      <tr class="mv"><td class="tc">11:30-12:30</td><td class="pl">집 → 김포공항</td><td class="ct">주변 주차장 이동</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="mv"><td class="tc">12:30-13:00</td><td class="pl">주차장</td><td class="ct">주차 후 택시로 공항 이동</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr><td class="tc">13:00-14:25</td><td class="pl">김포공항</td><td class="ct">출국수속</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="mv"><td class="tc">14:25-15:40</td><td class="pl">비행</td><td class="ct">김포 → 제주 (1시간 15분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr><td class="tc">15:40-16:00</td><td class="pl">제주공항</td><td class="ct">수하물 & 렌터카 셔틀</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr><td class="tc">16:10-16:30</td><td class="pl">땡큐제주렌터카</td><td class="ct">렌터카 픽업</td><td><span class="cb c-mv">이동</span></td><td><a class="nl" href="https://naver.me/FnmZ7JYr" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">16:30-17:10</td><td class="pl">이동</td><td class="ct">애월 방면 (40분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">17:10-17:50</td><td class="pl">올댓커피제주</td><td class="ct">커피 & 바다 구경</td><td><span class="cb c-cf">카페</span></td><td><a class="nl" href="https://naver.me/F9N4Vo1Y" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">17:50-18:10</td><td class="pl">이동</td><td class="ct">한림 방면 (20분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">18:10-18:40</td><td class="pl">로그먼트제주</td><td class="ct">빈티지샵 구경</td><td><span class="cb c-sp">쇼핑</span></td><td><a class="nl" href="https://naver.me/FDnpLvwf" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">18:40-19:40</td><td class="pl">이동</td><td class="ct">서귀포 방면 (60분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr><td class="tc">19:40-20:00</td><td class="pl">더호텔</td><td class="ct">숙소 체크인</td><td><span class="cb c-st">숙소</span></td><td><a class="nl" href="https://naver.me/FtTEmoto" target="_blank">네이버</a></td></tr>
+      <tr class="hl"><td class="tc">20:00-22:00</td><td class="pl">우녁집 (예약)</td><td class="ct">저녁 - 흑돼지</td><td><span class="cb c-fd">식사</span></td><td><a class="nl" href="https://naver.me/5ch6iT5l" target="_blank">네이버</a></td></tr>
+      <tr><td class="tc">22:00-24:00</td><td class="pl">속살</td><td class="ct">2차 (웨이팅시 적심/목목목)</td><td><span class="cb c-fd">식사</span></td><td><a class="nl" href="https://naver.me/G7VOdF5a" target="_blank">네이버</a></td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<div class="table-area" id="table2">
+  <div class="timetable-wrap">
+    <table class="timetable"><thead class="c2">
+      <tr><th style="width:16%">시간</th><th style="width:20%">장소</th><th style="width:32%">내용</th><th style="width:12%">분류</th><th style="width:20%">지도</th></tr>
+    </thead><tbody>
+      <tr><td class="tc">09:30-11:00</td><td class="pl">더호텔</td><td class="ct">기상 및 퇴실</td><td><span class="cb c-st">숙소</span></td><td><a class="nl" href="https://naver.me/FtTEmoto" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">11:00-11:10</td><td class="pl">이동 (도보)</td><td class="ct">도보 10분</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">11:10-11:30</td><td class="pl">섬결</td><td class="ct">소품샵 구경</td><td><span class="cb c-sp">쇼핑</span></td><td><a class="nl" href="https://naver.me/5ajFlTjQ" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">11:30-12:00</td><td class="pl">이동</td><td class="ct">하림이네 방면 (30분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">12:00-13:00</td><td class="pl">하림이네정식</td><td class="ct">점심식사</td><td><span class="cb c-fd">식사</span></td><td><a class="nl" href="https://naver.me/xXw4kcvH" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">13:00-13:20</td><td class="pl">이동</td><td class="ct">대포 방면 (20분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">13:20-14:00</td><td class="pl">대포주상절리</td><td class="ct">명소 관광</td><td><span class="cb c-tr">관광</span></td><td><a class="nl" href="https://naver.me/5UEc0zez" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">14:00-14:40</td><td class="pl">이동</td><td class="ct">하효동 방면 (40분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">14:40-15:40</td><td class="pl">게우지코지</td><td class="ct">카페</td><td><span class="cb c-cf">카페</span></td><td><a class="nl" href="https://naver.me/GzE9Y3Lr" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">15:40-16:40</td><td class="pl">이동</td><td class="ct">백약이오름 방면 (60분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr style="background:#fff3e0;"><td class="tc" style="font-weight:700;color:#e74c3c;">16:40-17:40</td><td class="pl" style="color:#e74c3c;">🏔️ 백약이오름</td><td class="ct" style="font-weight:600;">오름 등산</td><td><span class="cb c-hk">등산</span></td><td><a class="nl" href="https://naver.me/xq3aXY6h" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">17:40-18:40</td><td class="pl">이동</td><td class="ct">올레시장 방면 (60분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">18:40-19:40</td><td class="pl">올레시장</td><td class="ct">저녁식사 & 장보기</td><td><span class="cb c-fd">식사</span></td><td><a class="nl" href="https://naver.me/xOxHEBfc" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">19:40-20:20</td><td class="pl">이동</td><td class="ct">미니메리 방면 (40분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr><td class="tc">20:20-20:40</td><td class="pl">편의점</td><td class="ct">술, 라면, 음료 구매</td><td><span class="cb c-sp">쇼핑</span></td><td><a class="nl" href="https://naver.me/FSv6I64L" target="_blank">네이버</a></td></tr>
+      <tr class="hl"><td class="tc">20:40-23:00</td><td class="pl">미니메리</td><td class="ct">저녁식사</td><td><span class="cb c-fd">식사</span></td><td><a class="nl" href="https://naver.me/G657MrHx" target="_blank">네이버</a></td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<div class="table-area" id="table3">
+  <div class="timetable-wrap">
+    <table class="timetable"><thead class="c3">
+      <tr><th style="width:16%">시간</th><th style="width:20%">장소</th><th style="width:32%">내용</th><th style="width:12%">분류</th><th style="width:20%">지도</th></tr>
+    </thead><tbody>
+      <tr class="hl"><td class="tc">10:00-11:00</td><td class="pl">미니메리</td><td class="ct">조식</td><td><span class="cb c-fd">식사</span></td><td><a class="nl" href="https://naver.me/G657MrHx" target="_blank">네이버</a></td></tr>
+      <tr class="hl"><td class="tc">11:00-12:00</td><td class="pl">미니메리/휴일로</td><td class="ct">바닷가 산책 & 커피</td><td><span class="cb c-tr">관광</span></td><td></td></tr>
+      <tr class="mv"><td class="tc">12:00-12:30</td><td class="pl">이동</td><td class="ct">산방산 방면 (30분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">12:30-14:00</td><td class="pl">산방산 & 용머리해안</td><td class="ct">관광</td><td><span class="cb c-tr">관광</span></td><td><a class="nl" href="https://naver.me/5t7jUXfS" target="_blank">네이버</a></td></tr>
+      <tr class="hl"><td class="tc">14:00-14:20</td><td class="pl">플레이사계</td><td class="ct">인생네컷 촬영</td><td><span class="cb c-ex">체험</span></td><td><a class="nl" href="https://naver.me/xbA3m2Wh" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">14:20-15:00</td><td class="pl">이동</td><td class="ct">협재 방면 (40분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">15:00-15:40</td><td class="pl">호텔샌드</td><td class="ct">카페 / 협재바다</td><td><span class="cb c-cf">카페</span></td><td><a class="nl" href="https://naver.me/GhwEtIMt" target="_blank">네이버</a></td></tr>
+      <tr class="hl"><td class="tc">15:40-16:10</td><td class="pl">후르츨리 협재점</td><td class="ct">소품샵 구경</td><td><span class="cb c-sp">쇼핑</span></td><td><a class="nl" href="https://naver.me/GUw9DDqd" target="_blank">네이버</a></td></tr>
+      <tr class="hl"><td class="tc">16:10-16:30</td><td class="pl">보롬사진관</td><td class="ct">사진 촬영</td><td><span class="cb c-ex">체험</span></td><td><a class="nl" href="https://naver.me/FVSOuyOt" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">16:30-17:00</td><td class="pl">이동</td><td class="ct">한림 방면 (30분)</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">17:00-17:20</td><td class="pl">한림페이보릿</td><td class="ct">소품샵 구경</td><td><span class="cb c-sp">쇼핑</span></td><td><a class="nl" href="https://naver.me/xIeTniZK" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">17:20-17:30</td><td class="pl">이동</td><td class="ct">10분</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">17:30-18:30</td><td class="pl">시키 (예약)</td><td class="ct">저녁식사</td><td><span class="cb c-fd">식사</span></td><td><a class="nl" href="https://naver.me/xKERbqU2" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">18:30-18:40</td><td class="pl">이동</td><td class="ct">10분</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr class="hl"><td class="tc">18:40-19:30</td><td class="pl">바이러닉에스프레소바</td><td class="ct">카페 & 바다</td><td><span class="cb c-cf">카페</span></td><td><a class="nl" href="https://naver.me/xa5Rgd4W" target="_blank">네이버</a></td></tr>
+      <tr class="mv"><td class="tc">19:30-20:00</td><td class="pl">이동</td><td class="ct">렌터카 반납 출발</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+      <tr><td class="tc">20:00~</td><td class="pl">땡큐제주렌터카</td><td class="ct">렌터카 반납 & 셔틀</td><td><span class="cb c-mv">이동</span></td><td><a class="nl" href="https://naver.me/FnmZ7JYr" target="_blank">네이버</a></td></tr>
+      <tr><td class="tc">20:30~</td><td class="pl">제주공항</td><td class="ct">출국수속 & 면세점</td><td><span class="cb c-mv">이동</span></td><td></td></tr>
+    </tbody></table>
+  </div>
+</div>
+
+<!-- ═══ 지도 ═══ -->
+<div class="map-area" id="mapArea1"><div id="map1" class="leaflet-map"></div><div id="sum1"></div></div>
+<div class="map-area" id="mapArea2"><div id="map2" class="leaflet-map"></div><div id="sum2"></div></div>
+<div class="map-area" id="mapArea3"><div id="map3" class="leaflet-map"></div><div id="sum3"></div></div>
+
+</div><!-- content-area -->
+
+<script>
+const catColors = { '이동':'#95a5a6','관광':'#2980b9','카페':'#8e44ad','식사':'#27ae60','숙소':'#f39c12','쇼핑':'#e67e22','등산':'#e74c3c','체험':'#e74c3c' };
+const days = [
+  { label:'1일차 · 도착 & 이동', color:'#3498db', spots:[
+    {name:'제주공항',emoji:'✈️',cat:'이동',time:'13:00',desc:'도착 & 렌터카 수령',lat:33.5104,lng:126.4914,naver:'',labelDir:'right',noLeader:true},
+    {name:'올댓커피제주',emoji:'☕',cat:'카페',time:'14:30-15:30',desc:'카페 (애월)',lat:33.4628,lng:126.3098,naver:'https://naver.me/xX2B0mCO',labelDir:'left',noLeader:true},
+    {name:'로그먼트제주',emoji:'🛍️',cat:'쇼핑',time:'16:00-17:00',desc:'소품샵 (한림)',lat:33.4190,lng:126.2650,naver:'https://naver.me/5KQGS2pE',labelDir:'left',noLeader:true},
+    {name:'더호텔',emoji:'🏨',cat:'숙소',time:'18:30',desc:'체크인 (서귀포)',lat:33.2550,lng:126.5580,naver:'https://naver.me/FtTEmoto',labelDir:'bottom-left',noLeader:true,highlight:true},
+    {name:'우녁집',emoji:'🥩',cat:'식사',time:'19:00-20:00',desc:'저녁식사',lat:33.2380,lng:126.5800,naver:'https://naver.me/GOCwBJqo',labelDir:'bottom-right',labelDist:0.03},
+    {name:'속살',emoji:'🍻',cat:'식사',time:'20:30-22:00',desc:'2차',lat:33.2600,lng:126.5900,naver:'',labelDir:'right',labelDist:0.035}
+  ], moveTimes:['40분','20분','60분','',''] },
+  { label:'2일차 · 메인 관광', color:'#e74c3c', spots:[
+    {name:'더호텔/섬결',emoji:'🏨',cat:'숙소',time:'09:30-11:10',desc:'기상 & 소품샵',lat:33.2560,lng:126.5700,naver:'https://naver.me/FtTEmoto',labelDir:'top',noLeader:true},
+    {name:'하림이네정식',emoji:'🍽️',cat:'식사',time:'12:00-13:00',desc:'점심식사',lat:33.2600,lng:126.5100,naver:'https://naver.me/xXw4kcvH',labelDir:'top',noLeader:true},
+    {name:'대포주상절리',emoji:'🌊',cat:'관광',time:'13:20-14:00',desc:'명소 관광 (중문)',lat:33.2378,lng:126.4255,naver:'https://naver.me/5UEc0zez',labelDir:'bottom-left',labelDist:0.035},
+    {name:'게우지코지',emoji:'☕',cat:'카페',time:'14:40-15:40',desc:'카페 (하효동)',lat:33.2350,lng:126.6200,naver:'https://naver.me/GzE9Y3Lr',labelDir:'right',noLeader:true},
+    {name:'백약이오름',emoji:'⛰️',cat:'등산',time:'16:40-17:40',desc:'오름 등산',lat:33.3550,lng:126.7600,naver:'https://naver.me/xq3aXY6h',labelDir:'right',noLeader:true,highlight:true},
+    {name:'올레시장',emoji:'🏪',cat:'식사',time:'18:40-19:40',desc:'저녁식사 & 장보기',lat:33.2400,lng:126.5600,naver:'https://naver.me/xOxHEBfc',labelDir:'bottom',labelDist:0.035},
+    {name:'미니메리',emoji:'🏡',cat:'숙소',time:'20:40',desc:'숙소 도착 (안덕면)',lat:33.2545,lng:126.3620,naver:'https://naver.me/G657MrHx',labelDir:'left',noLeader:true,highlight:true}
+  ], moveTimes:['30분','20분','40분','60분','60분','40분'] },
+  { label:'3일차 · 출발일', color:'#27ae60', spots:[
+    {name:'미니메리',emoji:'🏡',cat:'숙소',time:'10:00-12:00',desc:'조식 & 산책',lat:33.2545,lng:126.3620,naver:'https://naver.me/G657MrHx',labelDir:'right',noLeader:true},
+    {name:'산방산',emoji:'🏔️',cat:'관광',time:'12:30-14:00',desc:'산방산 & 용머리해안',lat:33.2450,lng:126.3100,naver:'https://naver.me/5t7jUXfS',labelDir:'left',noLeader:true},
+    {name:'플레이사계',emoji:'📸',cat:'체험',time:'14:00-14:20',desc:'인생네컷 촬영',lat:33.2200,lng:126.3050,naver:'https://naver.me/xbA3m2Wh',labelDir:'bottom',labelDist:0.03},
+    {name:'호텔샌드',emoji:'☕',cat:'카페',time:'15:00-15:40',desc:'카페 / 협재바다',lat:33.3850,lng:126.2150,naver:'https://naver.me/GhwEtIMt',labelDir:'left',labelDist:0.045},
+    {name:'후르츨리',emoji:'🛍️',cat:'쇼핑',time:'15:40-16:10',desc:'소품샵 (협재)',lat:33.4050,lng:126.2350,naver:'https://naver.me/GUw9DDqd',labelDir:'right',noLeader:true},
+    {name:'보롬사진관',emoji:'📸',cat:'체험',time:'16:10-16:30',desc:'사진 촬영',lat:33.4250,lng:126.2200,naver:'https://naver.me/FVSOuyOt',labelDir:'left',labelDist:0.04},
+    {name:'한림페이보릿',emoji:'🛍️',cat:'쇼핑',time:'17:00-17:20',desc:'소품샵 (한림)',lat:33.4350,lng:126.2700,naver:'https://naver.me/xIeTniZK',labelDir:'right',noLeader:true},
+    {name:'시키',emoji:'🍽️',cat:'식사',time:'17:30-18:30',desc:'저녁식사 (예약)',lat:33.4580,lng:126.3520,naver:'https://naver.me/xKERbqU2',labelDir:'left',noLeader:true,highlight:true},
+    {name:'바이러닉',emoji:'☕',cat:'카페',time:'18:40-19:30',desc:'카페 & 바다',lat:33.4700,lng:126.3800,naver:'https://naver.me/xa5Rgd4W',labelDir:'right',noLeader:true},
+    {name:'제주공항',emoji:'✈️',cat:'이동',time:'20:30~',desc:'렌터카 반납 & 출발',lat:33.5104,lng:126.4914,naver:'',labelDir:'right',noLeader:true}
+  ], moveTimes:['30분','','40분','','','30분','10분','10분','30분'] }
+];
+
+let currentDay = 1, currentView = 'table';
+const maps = {};
+
+function dirVec(d){switch(d){case'top':return{dlat:1,dlng:0};case'bottom':return{dlat:-1,dlng:0};case'left':return{dlat:0,dlng:-1};case'right':return{dlat:0,dlng:1};case'top-left':return{dlat:.7,dlng:-.7};case'top-right':return{dlat:.7,dlng:.7};case'bottom-left':return{dlat:-.7,dlng:-.7};case'bottom-right':return{dlat:-.7,dlng:.7};default:return{dlat:0,dlng:1};}}
+function labelStyle(d){if(d.includes('left'))return{anchor:[120,14],align:'right',width:120};if(d.includes('right'))return{anchor:[0,14],align:'left',width:120};return{anchor:[60,14],align:'center',width:120};}
+
+function initMap(idx) {
+  if (maps[idx]) return;
+  const el = 'map'+(idx+1);
+  const m = L.map(el, { center:[33.38,126.55], zoom:11 });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{attribution:'',maxZoom:19,subdomains:'abcd'}).addTo(m);
+  maps[idx] = m;
+
+  const day = days[idx], spots = day.spots, latlngs = [];
+  spots.forEach((s,i)=>{
+    const c = catColors[s.cat]||day.color, hl = s.highlight, ms = hl?36:28, sz = hl?'lg':'sm';
+    const icon = L.divIcon({className:'',iconSize:[ms,ms],iconAnchor:[ms/2,ms/2],popupAnchor:[0,-ms/2-4],html:`<div class="num-marker ${sz}" style="background:${c}">${i+1}</div>`});
+    const mk = L.marker([s.lat,s.lng],{icon,zIndexOffset:1000+(spots.length-i)}).addTo(m);
+    let ph = `<div class="popup-title">${s.emoji} ${s.name}</div><div class="popup-desc">${s.desc}</div><div class="popup-time">🕐 ${s.time}</div>`;
+    if(s.naver) ph += `<a class="popup-link" href="${s.naver}" target="_blank">네이버 지도</a>`;
+    mk.bindPopup(ph,{maxWidth:240});
+    latlngs.push([s.lat,s.lng]);
+
+    const dir = s.labelDir||'right', ls = labelStyle(dir);
+    if(s.noLeader){
+      const off=(()=>{const m2=ms/2+4;switch(dir){case'top':return[-60,-m2-24];case'bottom':return[-60,m2+4];case'left':return[-ls.width-m2,-12];case'right':return[m2,-12];case'top-left':return[-ls.width-m2+10,-m2-14];case'top-right':return[m2-10,-m2-14];case'bottom-left':return[-ls.width-m2+10,m2];case'bottom-right':return[m2-10,m2];default:return[m2,-12];}})();
+      L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',iconSize:[ls.width,28],iconAnchor:[-off[0],-off[1]],html:`<div class="leader-label" style="color:${c};background:#fff;border:2px solid ${c};text-align:${ls.align}">${s.emoji} ${s.name}</div>`}),interactive:false,zIndexOffset:500}).addTo(m);
+    } else {
+      const dist=s.labelDist||.025,dv=dirVec(dir),eLat=s.lat+dv.dlat*dist,eLng=s.lng+dv.dlng*dist*1.3;
+      L.polyline([[s.lat,s.lng],[eLat,eLng]],{color:c,weight:1.8,opacity:.6,dashArray:'4,3'}).addTo(m);
+      L.circleMarker([eLat,eLng],{radius:3,color:c,fillColor:c,fillOpacity:1,weight:0}).addTo(m);
+      L.marker([eLat,eLng],{icon:L.divIcon({className:'',iconSize:[ls.width,28],iconAnchor:[ls.anchor[0],ls.anchor[1]],html:`<div class="leader-label" style="color:${c};background:#fff;border:2px solid ${c};text-align:${ls.align}">${s.emoji} ${s.name}</div>`}),interactive:false,zIndexOffset:500}).addTo(m);
+    }
+  });
+
+  if(latlngs.length>1){
+    L.polyline(latlngs,{color:day.color,weight:3.5,opacity:.5,dashArray:'10,7',lineCap:'round'}).addTo(m);
+    for(let i=0;i<latlngs.length-1;i++){
+      const mt=day.moveTimes[i]; if(!mt)continue;
+      const mLat=(latlngs[i][0]+latlngs[i+1][0])/2,mLng=(latlngs[i][1]+latlngs[i+1][1])/2;
+      const dx=latlngs[i+1][1]-latlngs[i][1],dy=latlngs[i+1][0]-latlngs[i][0],ln=Math.sqrt(dx*dx+dy*dy)||1;
+      L.marker([mLat+(-dx/ln)*.008,mLng+(dy/ln)*.01],{icon:L.divIcon({className:'',iconSize:[60,20],iconAnchor:[30,10],html:`<div style="background:${day.color};color:#fff;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;text-align:center;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.2);font-family:'Noto Sans KR'">🚗 ${mt}</div>`}),interactive:false,zIndexOffset:100}).addTo(m);
+    }
+  }
+  if(latlngs.length>0)m.fitBounds(L.latLngBounds(latlngs),{padding:[50,50],maxZoom:12});
+
+  const lg=L.control({position:'bottomright'});
+  lg.onAdd=()=>{const d=L.DomUtil.create('div','legend-box');d.innerHTML=`<h4>범례</h4><div class="legend-item"><span class="legend-dot" style="background:#8e44ad"></span>카페</div><div class="legend-item"><span class="legend-dot" style="background:#2980b9"></span>관광</div><div class="legend-item"><span class="legend-dot" style="background:#27ae60"></span>식사</div><div class="legend-item"><span class="legend-dot" style="background:#f39c12"></span>숙소</div><div class="legend-item"><span class="legend-dot" style="background:#e67e22"></span>쇼핑</div><div class="legend-item"><span class="legend-dot" style="background:#e74c3c"></span>등산/체험</div>`;return d;};
+  lg.addTo(m);
+
+  let rh='';
+  spots.forEach((s,i)=>{const c=catColors[s.cat]||day.color;rh+=`<span class="route-step" style="background:${c}"><span class="num">${i+1}</span>${s.emoji} ${s.name}</span>`;if(i<spots.length-1){const mt=day.moveTimes[i];rh+=mt?`<span class="route-arrow">→</span><span class="mt-badge">🚗 ${mt}</span><span class="route-arrow">→</span>`:`<span class="route-arrow">→</span>`;}});
+  document.getElementById('sum'+(idx+1)).innerHTML=`<div class="route-card"><h3 style="color:${day.color}">${day.label}</h3><div class="route-steps">${rh}</div></div>`;
+}
+
+function switchDay(d) {
+  currentDay = d;
+  document.querySelectorAll('.day-tab').forEach(t => t.classList.toggle('active', +t.dataset.day === d));
+  updateView();
+}
+
+function switchView(v) {
+  currentView = v;
+  document.querySelectorAll('.view-btn').forEach((b,i) => b.classList.toggle('active', (i===0&&v==='table')||(i===1&&v==='map')));
+  updateView();
+}
+
+function updateView() {
+  [1,2,3].forEach(d => {
+    document.getElementById('table'+d).classList.toggle('show', currentView==='table' && currentDay===d);
+    document.getElementById('mapArea'+d).classList.toggle('show', currentView==='map' && currentDay===d);
+  });
+  if (currentView === 'map') {
+    const idx = currentDay - 1;
+    initMap(idx);
+    setTimeout(() => maps[idx] && maps[idx].invalidateSize(), 100);
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// 스와이프 지원
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  const diff = e.changedTouches[0].clientX - touchStartX;
+  if (Math.abs(diff) > 80) {
+    if (diff < 0 && currentDay < 3) switchDay(currentDay + 1);
+    if (diff > 0 && currentDay > 1) switchDay(currentDay - 1);
+  }
+});
+</script>
+</body>
+</html>
