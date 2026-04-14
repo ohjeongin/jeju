@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>여행 일정 플래너</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --cafe: #8e44ad;
+  --meal: #27ae60;
+  --tour: #2980b9;
+  --hotel: #f39c12;
+  --shop: #e67e22;
+  --activity: #e74c3c;
+  --move: #bdc3c7;
+  --day1: #3498db;
+  --day2: #e74c3c;
+  --day3: #27ae60;
+  --day4: #9b59b6;
+  --bg: #f5f6fa;
+  --card: #ffffff;
+  --text: #2c3e50;
+  --text-light: #7f8c8d;
+  --border: #e0e0e0;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Top Navigation */
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.top-nav h1 {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.mode-toggle {
+  display: flex;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid var(--day1);
+  flex-shrink: 0;
+}
+
+.mode-toggle button {
+  padding: 6px 16px;
+  border: none;
+  background: #fff;
+  color: var(--day1);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-toggle button.active {
+  background: var(--day1);
+  color: #fff;
+}
+
+.btn-preview {
+  padding: 6px 14px;
+  border: none;
+  background: var(--meal);
+  color: #fff;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 0.2s;
+}
+
+.btn-preview:hover { opacity: 0.85; }
+
+/* Day Tabs */
+.day-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 12px 16px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.day-tabs::-webkit-scrollbar { display: none; }
+
+.day-tab {
+  padding: 8px 18px;
+  border: none;
+  border-radius: 20px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  color: #fff;
+  opacity: 0.5;
+}
+
+.day-tab.active { opacity: 1; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+
+/* Input Mode */
+.input-section {
+  padding: 0 16px 100px;
+}
+
+.basic-info {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: var(--shadow);
+}
+
+.basic-info h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--text-light);
+}
+
+.form-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.form-group label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.form-group input {
+  padding: 8px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus { border-color: var(--day1); }
+
+/* Schedule Table */
+.schedule-card {
+  background: var(--card);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.schedule-header {
+  padding: 12px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.schedule-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.btn-add-row {
+  padding: 6px 14px;
+  border: 2px dashed var(--day1);
+  background: transparent;
+  color: var(--day1);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-add-row:hover { background: rgba(52,152,219,0.08); }
+
+.schedule-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.schedule-table {
+  width: 100%;
+  min-width: 800px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.schedule-table thead th {
+  background: #f8f9fa;
+  padding: 8px 6px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-light);
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+
+.schedule-table tbody td {
+  padding: 4px 4px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.schedule-table tbody tr:hover { background: #f8f9fa; }
+
+.schedule-table input, .schedule-table select {
+  width: 100%;
+  padding: 6px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 13px;
+  background: transparent;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.schedule-table input:focus, .schedule-table select:focus {
+  border-color: var(--day1);
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(52,152,219,0.15);
+}
+
+.schedule-table select {
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 20px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237f8c8d'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+}
+
+.col-num { width: 30px; text-align: center; color: var(--text-light); font-weight: 500; }
+.col-time { width: 110px; }
+.col-place { width: 140px; }
+.col-desc { width: 180px; }
+.col-cat { width: 90px; }
+.col-link { width: 130px; }
+.col-lat { width: 80px; }
+.col-lng { width: 80px; }
+.col-actions { width: 70px; text-align: center; }
+
+.row-actions {
+  display: flex;
+  gap: 2px;
+  justify-content: center;
+}
+
+.row-actions button {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-light);
+  transition: all 0.15s;
+}
+
+.row-actions button:hover { background: #f0f0f0; color: var(--text); }
+.row-actions .btn-del:hover { background: #fde8e8; color: var(--activity); }
+
+/* Result Mode */
+.result-section {
+  padding: 0 16px 40px;
+}
+
+.view-toggle {
+  display: flex;
+  gap: 6px;
+  padding: 0 0 12px;
+}
+
+.view-toggle button {
+  flex: 1;
+  padding: 10px;
+  border: 2px solid var(--border);
+  background: #fff;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  color: var(--text-light);
+}
+
+.view-toggle button.active {
+  border-color: var(--day1);
+  color: var(--day1);
+  background: rgba(52,152,219,0.06);
+}
+
+/* Result Timetable */
+.result-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+  background: var(--card);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.result-table thead th {
+  background: #2c3e50;
+  color: #fff;
+  padding: 10px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.result-table tbody tr { transition: background 0.15s; }
+.result-table tbody td {
+  padding: 10px 8px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: middle;
+}
+
+.result-table tbody tr.row-move {
+  color: #aaa;
+  background: #fafafa;
+}
+
+.result-table tbody tr.row-highlight {
+  background: #fffde7;
+}
+
+.cat-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.naver-link {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--meal);
+  color: #fff;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.naver-link:hover { opacity: 0.85; }
+
+/* Map */
+#map {
+  width: 100%;
+  height: 500px;
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  margin-bottom: 16px;
+}
+
+.map-legend {
+  background: var(--card);
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* Custom Leaflet Marker */
+.custom-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+.marker-label {
+  background: rgba(255,255,255,0.92);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  border: none;
+  color: var(--text);
+}
+
+.travel-label {
+  background: rgba(44,62,80,0.8);
+  color: #fff;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  border: none;
+}
+
+.hidden { display: none !important; }
+
+/* Data management buttons */
+.data-actions {
+  padding: 16px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.data-actions button {
+  padding: 8px 14px;
+  border: 1.5px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--text-light);
+  transition: all 0.2s;
+}
+
+.data-actions button:hover {
+  border-color: var(--day1);
+  color: var(--day1);
+}
+
+.data-actions .btn-danger {
+  border-color: var(--activity);
+  color: var(--activity);
+}
+
+.data-actions .btn-danger:hover {
+  background: #fde8e8;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .top-nav h1 { font-size: 14px; }
+  .mode-toggle button { padding: 5px 10px; font-size: 12px; }
+  .btn-preview { padding: 5px 10px; font-size: 12px; }
+  #map { height: 400px; }
+  .form-group { min-width: 100px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Top Navigation -->
+<nav class="top-nav">
+  <h1 id="navTitle">여행 일정 플래너</h1>
+  <div class="mode-toggle">
+    <button id="btnInputMode" class="active" onclick="switchMode('input')">입력</button>
+    <button id="btnResultMode" onclick="switchMode('result')">결과</button>
+  </div>
+  <button class="btn-preview" onclick="switchMode('result')">미리보기</button>
+</nav>
+
+<!-- ========== INPUT MODE ========== -->
+<div id="inputMode">
+  <!-- Basic Info -->
+  <div class="input-section">
+    <div class="basic-info">
+      <h3>기본 정보</h3>
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>여행 제목</label>
+          <input type="text" id="tripTitle" placeholder="예: 제주도 가족여행" oninput="onBasicInfoChange()">
+        </div>
+        <div class="form-group">
+          <label>시작 날짜</label>
+          <input type="date" id="tripStartDate" oninput="onBasicInfoChange()">
+        </div>
+        <div class="form-group" style="flex:0.5; min-width:80px">
+          <label>여행 일수</label>
+          <input type="number" id="tripDays" min="1" max="30" value="3" onchange="onDaysChange()">
+        </div>
+      </div>
+    </div>
+
+    <!-- Day Tabs (input) -->
+    <div class="day-tabs" id="inputDayTabs"></div>
+
+    <!-- Schedule Table -->
+    <div class="schedule-card">
+      <div class="schedule-header">
+        <h3 id="scheduleTitle">DAY 1 일정</h3>
+        <button class="btn-add-row" onclick="addRow()">+ 행 추가</button>
+      </div>
+      <div class="schedule-table-wrap">
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th class="col-num">#</th>
+              <th class="col-time">시간</th>
+              <th class="col-place">장소</th>
+              <th class="col-desc">내용</th>
+              <th class="col-cat">분류</th>
+              <th class="col-link">네이버링크</th>
+              <th class="col-lat">위도</th>
+              <th class="col-lng">경도</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="scheduleBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Data Actions -->
+  <div class="data-actions">
+    <button onclick="exportData()">내보내기 (JSON)</button>
+    <button onclick="importData()">불러오기 (JSON)</button>
+    <button class="btn-danger" onclick="clearAllData()">전체 초기화</button>
+  </div>
+</div>
+
+<!-- ========== RESULT MODE ========== -->
+<div id="resultMode" class="hidden">
+  <div class="result-section">
+    <!-- Day Tabs (result) -->
+    <div class="day-tabs" id="resultDayTabs"></div>
+
+    <!-- View Toggle -->
+    <div class="view-toggle">
+      <button id="btnTimetable" class="active" onclick="switchView('timetable')">시간표</button>
+      <button id="btnMap" onclick="switchView('map')">지도</button>
+    </div>
+
+    <!-- Timetable View -->
+    <div id="timetableView">
+      <table class="result-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>시간</th>
+            <th>장소</th>
+            <th>내용</th>
+            <th>분류</th>
+            <th>링크</th>
+          </tr>
+        </thead>
+        <tbody id="resultBody"></tbody>
+      </table>
+    </div>
+
+    <!-- Map View -->
+    <div id="mapView" class="hidden">
+      <div id="map"></div>
+      <div class="map-legend" id="mapLegend"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file input for import -->
+<input type="file" id="fileInput" accept=".json" style="display:none" onchange="handleFileImport(event)">
+
+<script>
+// ===== STATE =====
+const CATEGORIES = ['이동','카페','식사','관광','쇼핑','숙소','체험','등산'];
+const CAT_COLORS = {
+  '이동': '#bdc3c7',
+  '카페': '#8e44ad',
+  '식사': '#27ae60',
+  '관광': '#2980b9',
+  '숙소': '#f39c12',
+  '쇼핑': '#e67e22',
+  '체험': '#e74c3c',
+  '등산': '#e74c3c'
+};
+const DAY_COLORS = ['#3498db','#e74c3c','#27ae60','#9b59b6'];
+
+let state = {
+  title: '',
+  startDate: '',
+  days: 3,
+  currentDay: 0,
+  schedules: {},
+  mode: 'input',
+  view: 'timetable'
+};
+
+let map = null;
+let mapLayers = [];
+
+// ===== INIT =====
+function init() {
+  loadState();
+  document.getElementById('tripTitle').value = state.title;
+  document.getElementById('tripStartDate').value = state.startDate;
+  document.getElementById('tripDays').value = state.days;
+  updateNavTitle();
+  renderDayTabs();
+  renderSchedule();
+}
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('travelPlannerState');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      state = { ...state, ...parsed };
+    }
+  } catch(e) { console.warn('Failed to load state', e); }
+  // Ensure schedules exist for all days
+  for (let i = 0; i < state.days; i++) {
+    if (!state.schedules[i]) {
+      state.schedules[i] = [createEmptyRow()];
+    }
+  }
+}
+
+function saveState() {
+  try {
+    localStorage.setItem('travelPlannerState', JSON.stringify(state));
+  } catch(e) { console.warn('Failed to save state', e); }
+}
+
+function createEmptyRow() {
+  return { time: '', place: '', desc: '', cat: '관광', link: '', lat: '', lng: '' };
+}
+
+// ===== NAV =====
+function updateNavTitle() {
+  document.getElementById('navTitle').textContent = state.title || '여행 일정 플래너';
+}
+
+function switchMode(mode) {
+  state.mode = mode;
+  document.getElementById('inputMode').classList.toggle('hidden', mode !== 'input');
+  document.getElementById('resultMode').classList.toggle('hidden', mode !== 'result');
+  document.getElementById('btnInputMode').classList.toggle('active', mode === 'input');
+  document.getElementById('btnResultMode').classList.toggle('active', mode === 'result');
+
+  if (mode === 'result') {
+    renderResultDayTabs();
+    renderResult();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  saveState();
+}
+
+function switchView(view) {
+  state.view = view;
+  document.getElementById('timetableView').classList.toggle('hidden', view !== 'timetable');
+  document.getElementById('mapView').classList.toggle('hidden', view !== 'map');
+  document.getElementById('btnTimetable').classList.toggle('active', view === 'timetable');
+  document.getElementById('btnMap').classList.toggle('active', view === 'map');
+
+  if (view === 'map') {
+    setTimeout(() => renderMap(), 100);
+  }
+}
+
+// ===== DAY TABS =====
+function getDayColor(i) {
+  return i < DAY_COLORS.length ? DAY_COLORS[i] : DAY_COLORS[3];
+}
+
+function getDayDateStr(dayIndex) {
+  if (!state.startDate) return '';
+  const d = new Date(state.startDate);
+  d.setDate(d.getDate() + dayIndex);
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+function renderDayTabs() {
+  const container = document.getElementById('inputDayTabs');
+  container.innerHTML = '';
+  for (let i = 0; i < state.days; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'day-tab' + (i === state.currentDay ? ' active' : '');
+    btn.style.background = getDayColor(i);
+    const dateStr = getDayDateStr(i);
+    btn.textContent = `DAY ${i+1}` + (dateStr ? ` (${dateStr})` : '');
+    btn.onclick = () => selectDay(i);
+    container.appendChild(btn);
+  }
+}
+
+function renderResultDayTabs() {
+  const container = document.getElementById('resultDayTabs');
+  container.innerHTML = '';
+  for (let i = 0; i < state.days; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'day-tab' + (i === state.currentDay ? ' active' : '');
+    btn.style.background = getDayColor(i);
+    const dateStr = getDayDateStr(i);
+    btn.textContent = `DAY ${i+1}` + (dateStr ? ` (${dateStr})` : '');
+    btn.onclick = () => { selectDay(i); renderResult(); };
+    container.appendChild(btn);
+  }
+}
+
+function selectDay(i) {
+  saveCurrentSchedule();
+  state.currentDay = i;
+  renderDayTabs();
+  renderResultDayTabs();
+  renderSchedule();
+  saveState();
+}
+
+// ===== BASIC INFO =====
+function onBasicInfoChange() {
+  state.title = document.getElementById('tripTitle').value;
+  state.startDate = document.getElementById('tripStartDate').value;
+  updateNavTitle();
+  renderDayTabs();
+  saveState();
+}
+
+function onDaysChange() {
+  const newDays = parseInt(document.getElementById('tripDays').value) || 1;
+  saveCurrentSchedule();
+  state.days = Math.max(1, Math.min(30, newDays));
+  document.getElementById('tripDays').value = state.days;
+  for (let i = 0; i < state.days; i++) {
+    if (!state.schedules[i]) state.schedules[i] = [createEmptyRow()];
+  }
+  if (state.currentDay >= state.days) state.currentDay = state.days - 1;
+  renderDayTabs();
+  renderSchedule();
+  saveState();
+}
+
+// ===== SCHEDULE TABLE (INPUT) =====
+function renderSchedule() {
+  const day = state.currentDay;
+  document.getElementById('scheduleTitle').textContent = `DAY ${day+1} 일정`;
+  const rows = state.schedules[day] || [createEmptyRow()];
+  const tbody = document.getElementById('scheduleBody');
+  tbody.innerHTML = '';
+
+  rows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="col-num">${idx+1}</td>
+      <td class="col-time"><input type="text" value="${esc(row.time)}" placeholder="09:00-10:00" data-field="time" data-idx="${idx}" onchange="onCellChange(this)"></td>
+      <td class="col-place"><input type="text" value="${esc(row.place)}" placeholder="장소명" data-field="place" data-idx="${idx}" onchange="onCellChange(this)"></td>
+      <td class="col-desc"><input type="text" value="${esc(row.desc)}" placeholder="설명" data-field="desc" data-idx="${idx}" onchange="onCellChange(this)"></td>
+      <td class="col-cat">
+        <select data-field="cat" data-idx="${idx}" onchange="onCellChange(this)">
+          ${CATEGORIES.map(c => `<option value="${c}" ${c===row.cat?'selected':''}>${c}</option>`).join('')}
+        </select>
+      </td>
+      <td class="col-link"><input type="url" value="${esc(row.link)}" placeholder="https://..." data-field="link" data-idx="${idx}" onchange="onCellChange(this)"></td>
+      <td class="col-lat"><input type="number" step="any" value="${row.lat}" placeholder="33.xxx" data-field="lat" data-idx="${idx}" onchange="onCellChange(this)"></td>
+      <td class="col-lng"><input type="number" step="any" value="${row.lng}" placeholder="126.xxx" data-field="lng" data-idx="${idx}" onchange="onCellChange(this)"></td>
+      <td class="col-actions">
+        <div class="row-actions">
+          <button title="위로" onclick="moveRow(${idx},-1)">&#9650;</button>
+          <button title="아래로" onclick="moveRow(${idx},1)">&#9660;</button>
+          <button class="btn-del" title="삭제" onclick="deleteRow(${idx})">&#10005;</button>
+        </div>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function esc(str) {
+  if (str == null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function onCellChange(el) {
+  const idx = parseInt(el.dataset.idx);
+  const field = el.dataset.field;
+  const day = state.currentDay;
+  if (!state.schedules[day]) return;
+  let val = el.value;
+  if (field === 'lat' || field === 'lng') {
+    val = val === '' ? '' : parseFloat(val);
+    if (isNaN(val)) val = '';
+  }
+  state.schedules[day][idx][field] = val;
+  saveState();
+}
+
+function saveCurrentSchedule() {
+  // Already saved via onCellChange, but just in case
+  saveState();
+}
+
+function addRow() {
+  const day = state.currentDay;
+  if (!state.schedules[day]) state.schedules[day] = [];
+  state.schedules[day].push(createEmptyRow());
+  renderSchedule();
+  saveState();
+  // Scroll to bottom of table
+  const wrap = document.querySelector('.schedule-table-wrap');
+  if (wrap) wrap.scrollTop = wrap.scrollHeight;
+}
+
+function deleteRow(idx) {
+  const day = state.currentDay;
+  if (!state.schedules[day] || state.schedules[day].length <= 1) return;
+  state.schedules[day].splice(idx, 1);
+  renderSchedule();
+  saveState();
+}
+
+function moveRow(idx, dir) {
+  const day = state.currentDay;
+  const rows = state.schedules[day];
+  if (!rows) return;
+  const newIdx = idx + dir;
+  if (newIdx < 0 || newIdx >= rows.length) return;
+  [rows[idx], rows[newIdx]] = [rows[newIdx], rows[idx]];
+  renderSchedule();
+  saveState();
+}
+
+// ===== RESULT MODE =====
+function renderResult() {
+  if (state.view === 'timetable') {
+    renderTimetable();
+  } else {
+    setTimeout(() => renderMap(), 100);
+  }
+  renderTimetable(); // always render timetable html
+}
+
+function renderTimetable() {
+  const day = state.currentDay;
+  const rows = state.schedules[day] || [];
+  const tbody = document.getElementById('resultBody');
+  tbody.innerHTML = '';
+
+  let num = 0;
+  rows.forEach((row) => {
+    const isMove = row.cat === '이동';
+    const hasContent = row.desc && row.desc.trim();
+    if (!isMove) num++;
+
+    const tr = document.createElement('tr');
+    if (isMove) tr.className = 'row-move';
+    else if (hasContent) tr.className = 'row-highlight';
+
+    const color = CAT_COLORS[row.cat] || '#bdc3c7';
+
+    let linkHtml = '';
+    if (row.link && row.link.trim()) {
+      linkHtml = `<a href="${esc(row.link)}" target="_blank" rel="noopener" class="naver-link">지도</a>`;
+    }
+
+    tr.innerHTML = `
+      <td style="text-align:center; font-weight:600; color:${isMove ? '#ccc' : '#555'}">${isMove ? '-' : num}</td>
+      <td style="white-space:nowrap; ${isMove ? 'color:#bbb' : ''}">${esc(row.time)}</td>
+      <td style="font-weight:${isMove ? '400' : '600'}; ${isMove ? 'color:#bbb' : ''}">${esc(row.place)}</td>
+      <td style="${isMove ? 'color:#bbb' : ''}">${esc(row.desc)}</td>
+      <td><span class="cat-badge" style="background:${color}">${esc(row.cat)}</span></td>
+      <td>${linkHtml}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ===== MAP =====
+function renderMap() {
+  const day = state.currentDay;
+  const rows = state.schedules[day] || [];
+
+  // Collect valid markers
+  const points = [];
+  let markerNum = 0;
+  rows.forEach((row, idx) => {
+    const lat = parseFloat(row.lat);
+    const lng = parseFloat(row.lng);
+    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+      const isMove = row.cat === '이동';
+      if (!isMove) markerNum++;
+      points.push({
+        lat, lng,
+        num: isMove ? null : markerNum,
+        place: row.place,
+        cat: row.cat,
+        desc: row.desc,
+        color: CAT_COLORS[row.cat] || '#bdc3c7',
+        isMove,
+        origIdx: idx
+      });
+    }
+  });
+
+  // Init or reset map
+  if (map) { map.remove(); map = null; }
+
+  const mapEl = document.getElementById('map');
+  if (points.length === 0) {
+    mapEl.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#aaa;font-size:14px">위도/경도 데이터가 없습니다.</div>';
+    return;
+  }
+
+  map = L.map('map', { zoomControl: true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; OpenStreetMap &copy; CARTO',
+    maxZoom: 19
+  }).addTo(map);
+
+  const bounds = [];
+
+  // Add markers
+  points.forEach((pt) => {
+    bounds.push([pt.lat, pt.lng]);
+
+    if (!pt.isMove) {
+      // Numbered marker
+      const icon = L.divIcon({
+        className: '',
+        html: `<div class="custom-marker" style="background:${pt.color}">${pt.num}</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+      L.marker([pt.lat, pt.lng], { icon }).addTo(map);
+
+      // Place label
+      if (pt.place) {
+        const label = L.divIcon({
+          className: '',
+          html: `<div class="marker-label">${esc(pt.place)}</div>`,
+          iconSize: [0, 0],
+          iconAnchor: [-18, 10]
+        });
+        L.marker([pt.lat, pt.lng], { icon: label, interactive: false }).addTo(map);
+      }
+    }
+  });
+
+  // Draw route polyline (dashed)
+  if (points.length >= 2) {
+    const latlngs = points.map(p => [p.lat, p.lng]);
+    L.polyline(latlngs, {
+      color: getDayColor(day),
+      weight: 2.5,
+      opacity: 0.7,
+      dashArray: '8,6'
+    }).addTo(map);
+
+    // Travel time labels on segments
+    for (let i = 0; i < points.length - 1; i++) {
+      const curr = points[i];
+      const next = points[i+1];
+
+      // If either endpoint is a move row, show the desc as travel info
+      let travelText = '';
+      if (curr.isMove && curr.desc) travelText = curr.desc;
+      else if (next.isMove && next.desc) travelText = next.desc;
+
+      // Also check rows between for move rows
+      if (!travelText) {
+        const startOrig = curr.origIdx;
+        const endOrig = next.origIdx;
+        for (let j = startOrig + 1; j < endOrig; j++) {
+          if (rows[j] && rows[j].cat === '이동' && rows[j].desc) {
+            travelText = rows[j].desc;
+            break;
+          }
+        }
+      }
+
+      if (travelText) {
+        const midLat = (curr.lat + next.lat) / 2;
+        const midLng = (curr.lng + next.lng) / 2;
+        const labelIcon = L.divIcon({
+          className: '',
+          html: `<div class="travel-label">${esc(travelText)}</div>`,
+          iconSize: [0, 0],
+          iconAnchor: [0, 0]
+        });
+        L.marker([midLat, midLng], { icon: labelIcon, interactive: false }).addTo(map);
+      }
+    }
+  }
+
+  // Fit bounds
+  if (bounds.length > 0) {
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+  }
+
+  // Render legend
+  renderMapLegend(points);
+}
+
+function renderMapLegend(points) {
+  const container = document.getElementById('mapLegend');
+  const cats = new Set(points.filter(p => !p.isMove).map(p => p.cat));
+  container.innerHTML = '';
+  cats.forEach(cat => {
+    const div = document.createElement('div');
+    div.className = 'legend-item';
+    div.innerHTML = `<span class="legend-dot" style="background:${CAT_COLORS[cat]}"></span>${cat}`;
+    container.appendChild(div);
+  });
+}
+
+// ===== DATA MANAGEMENT =====
+function exportData() {
+  saveCurrentSchedule();
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const filename = (state.title || '여행일정') + '.json';
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData() {
+  document.getElementById('fileInput').click();
+}
+
+function handleFileImport(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      state = { ...state, ...data };
+      document.getElementById('tripTitle').value = state.title || '';
+      document.getElementById('tripStartDate').value = state.startDate || '';
+      document.getElementById('tripDays').value = state.days || 3;
+      updateNavTitle();
+      renderDayTabs();
+      renderSchedule();
+      saveState();
+      alert('데이터를 불러왔습니다.');
+    } catch(err) {
+      alert('올바른 JSON 파일이 아닙니다.');
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('모든 데이터를 초기화하시겠습니까?')) return;
+  localStorage.removeItem('travelPlannerState');
+  state = {
+    title: '', startDate: '', days: 3, currentDay: 0,
+    schedules: {}, mode: 'input', view: 'timetable'
+  };
+  for (let i = 0; i < state.days; i++) {
+    state.schedules[i] = [createEmptyRow()];
+  }
+  document.getElementById('tripTitle').value = '';
+  document.getElementById('tripStartDate').value = '';
+  document.getElementById('tripDays').value = 3;
+  updateNavTitle();
+  renderDayTabs();
+  renderSchedule();
+}
+
+// ===== BOOT =====
+init();
+</script>
+</body>
+</html>
