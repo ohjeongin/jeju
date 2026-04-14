@@ -517,6 +517,79 @@ body {
   background: #fde8e8;
 }
 
+/* ── 여행 목록 화면 ── */
+.trip-list-screen {
+  padding: 20px 16px 100px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+.trip-list-header {
+  text-align: center;
+  padding: 30px 0 20px;
+}
+.trip-list-header h2 { font-size: 22px; font-weight: 800; color: var(--text); margin-bottom: 4px; }
+.trip-list-header p { font-size: 13px; color: var(--text-light); }
+
+.trip-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.trip-item {
+  background: #fff;
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 2px solid transparent;
+}
+.trip-item:hover, .trip-item:active {
+  border-color: var(--day1);
+  box-shadow: 0 4px 16px rgba(52,152,219,0.15);
+}
+.trip-item-info { flex: 1; min-width: 0; }
+.trip-item-title { font-size: 15px; font-weight: 700; margin-bottom: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trip-item-date { font-size: 12px; color: var(--text-light); }
+.trip-item-days { font-size: 11px; color: var(--day1); font-weight: 600; margin-top: 2px; }
+.trip-item-delete {
+  width: 32px; height: 32px; border: none; background: #fee;
+  border-radius: 8px; color: var(--activity); font-size: 16px;
+  cursor: pointer; flex-shrink: 0; margin-left: 12px;
+  display: flex; align-items: center; justify-content: center;
+}
+.trip-item-delete:hover { background: #fcc; }
+
+.btn-new-trip {
+  width: 100%;
+  padding: 16px;
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  background: none;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--day1);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-new-trip:hover {
+  border-color: var(--day1);
+  background: #f0f7ff;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-light);
+}
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state p { font-size: 14px; }
+
 /* Responsive */
 @media (max-width: 600px) {
   .top-nav h1 { font-size: 14px; }
@@ -530,14 +603,24 @@ body {
 <body>
 
 <!-- Top Navigation -->
-<nav class="top-nav">
-  <h1 id="navTitle">여행 일정 플래너</h1>
+<nav class="top-nav" id="mainNav" style="display:none;">
+  <h1 id="navTitle" onclick="showTripList()" style="cursor:pointer;">여행 일정 플래너</h1>
   <div class="mode-toggle">
     <button id="btnInputMode" class="active" onclick="switchMode('input')">입력</button>
     <button id="btnResultMode" onclick="switchMode('result')">결과</button>
   </div>
   <button class="btn-preview" onclick="switchMode('result')">미리보기</button>
 </nav>
+
+<!-- ═══ 여행 목록 화면 ═══ -->
+<div id="tripListScreen" class="trip-list-screen">
+  <div class="trip-list-header">
+    <h2>내 여행 목록</h2>
+    <p>여행을 선택하거나 새로 만드세요</p>
+  </div>
+  <div id="tripList" class="trip-list"></div>
+  <button class="btn-new-trip" onclick="createNewTrip()">+ 새 여행 만들기</button>
+</div>
 
 <!-- ========== INPUT MODE ========== -->
 <div id="inputMode">
@@ -593,9 +676,8 @@ body {
 
   <!-- Data Actions -->
   <div class="data-actions">
-    <button onclick="exportData()">내보내기 (JSON)</button>
-    <button onclick="importData()">불러오기 (JSON)</button>
-    <button class="btn-danger" onclick="clearAllData()">전체 초기화</button>
+    <button onclick="showTripList()">← 여행 목록으로</button>
+    <button class="btn-danger" onclick="deleteCurrentTrip()">이 여행 삭제</button>
   </div>
 </div>
 
@@ -664,39 +746,146 @@ let state = {
   view: 'timetable'
 };
 
+let currentTripId = null;
 let map = null;
 let mapLayers = [];
 
-// ===== INIT =====
-function init() {
-  loadState();
+// ===== 여행 목록 관리 =====
+function getTripList() {
+  try {
+    return JSON.parse(localStorage.getItem('tripList') || '[]');
+  } catch(e) { return []; }
+}
+
+function saveTripList(list) {
+  localStorage.setItem('tripList', JSON.stringify(list));
+}
+
+function saveTripData(id, data) {
+  localStorage.setItem('trip_' + id, JSON.stringify(data));
+}
+
+function loadTripData(id) {
+  try {
+    return JSON.parse(localStorage.getItem('trip_' + id) || 'null');
+  } catch(e) { return null; }
+}
+
+function deleteTripData(id) {
+  localStorage.removeItem('trip_' + id);
+}
+
+function showTripList() {
+  // 현재 여행 저장
+  if (currentTripId) saveCurrentTrip();
+  currentTripId = null;
+
+  document.getElementById('tripListScreen').style.display = 'block';
+  document.getElementById('mainNav').style.display = 'none';
+  document.getElementById('inputMode').classList.add('hidden');
+  document.getElementById('resultMode').classList.add('hidden');
+  renderTripList();
+  window.scrollTo({ top: 0 });
+}
+
+function renderTripList() {
+  const list = getTripList();
+  const container = document.getElementById('tripList');
+
+  if (list.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="icon">🗺️</div><p>아직 여행이 없어요<br>새 여행을 만들어보세요!</p></div>';
+    return;
+  }
+
+  container.innerHTML = list.map(t => `
+    <div class="trip-item" onclick="openTrip('${t.id}')">
+      <div class="trip-item-info">
+        <div class="trip-item-title">${t.title || '제목 없음'}</div>
+        <div class="trip-item-date">${t.startDate || '날짜 미정'}</div>
+        <div class="trip-item-days">${t.days || 3}일</div>
+      </div>
+      <button class="trip-item-delete" onclick="event.stopPropagation(); deleteTripFromList('${t.id}')">✕</button>
+    </div>
+  `).join('');
+}
+
+function createNewTrip() {
+  const id = 'trip_' + Date.now();
+  const list = getTripList();
+  list.push({ id, title: '', startDate: '', days: 3 });
+  saveTripList(list);
+
+  state = { title: '', startDate: '', days: 3, currentDay: 0, schedules: {}, mode: 'input', view: 'timetable' };
+  for (let i = 0; i < 3; i++) state.schedules[i] = [createEmptyRow()];
+  saveTripData(id, state);
+
+  openTrip(id);
+}
+
+function openTrip(id) {
+  currentTripId = id;
+  const data = loadTripData(id);
+  if (data) {
+    state = { ...state, ...data };
+  }
+  // Ensure schedules
+  for (let i = 0; i < state.days; i++) {
+    if (!state.schedules[i]) state.schedules[i] = [createEmptyRow()];
+  }
+
+  document.getElementById('tripListScreen').style.display = 'none';
+  document.getElementById('mainNav').style.display = 'flex';
+
   document.getElementById('tripTitle').value = state.title;
   document.getElementById('tripStartDate').value = state.startDate;
   document.getElementById('tripDays').value = state.days;
   updateNavTitle();
   renderDayTabs();
   renderSchedule();
+  switchMode(state.mode || 'input');
 }
 
-function loadState() {
-  try {
-    const saved = localStorage.getItem('travelPlannerState');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      state = { ...state, ...parsed };
-    }
-  } catch(e) { console.warn('Failed to load state', e); }
-  // Ensure schedules exist for all days
-  for (let i = 0; i < state.days; i++) {
-    if (!state.schedules[i]) {
-      state.schedules[i] = [createEmptyRow()];
-    }
+function saveCurrentTrip() {
+  if (!currentTripId) return;
+  saveTripData(currentTripId, state);
+  // 목록 정보도 업데이트
+  const list = getTripList();
+  const item = list.find(t => t.id === currentTripId);
+  if (item) {
+    item.title = state.title;
+    item.startDate = state.startDate;
+    item.days = state.days;
+    saveTripList(list);
   }
 }
 
+function deleteTripFromList(id) {
+  if (!confirm('이 여행을 삭제하시겠습니까?')) return;
+  let list = getTripList();
+  list = list.filter(t => t.id !== id);
+  saveTripList(list);
+  deleteTripData(id);
+  renderTripList();
+}
+
+function deleteCurrentTrip() {
+  if (!currentTripId) return;
+  if (!confirm('이 여행을 삭제하시겠습니까?')) return;
+  deleteTripFromList(currentTripId);
+  currentTripId = null;
+  showTripList();
+}
+
+// ===== INIT =====
+function init() {
+  // 여행 목록 화면으로 시작
+  showTripList();
+}
+
 function saveState() {
+  if (!currentTripId) return;
   try {
-    localStorage.setItem('travelPlannerState', JSON.stringify(state));
+    saveCurrentTrip();
   } catch(e) { console.warn('Failed to save state', e); }
 }
 
@@ -1080,64 +1269,7 @@ function renderMapLegend(points) {
   });
 }
 
-// ===== DATA MANAGEMENT =====
-function exportData() {
-  saveCurrentSchedule();
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const filename = (state.title || '여행일정') + '.json';
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function importData() {
-  document.getElementById('fileInput').click();
-}
-
-function handleFileImport(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e) {
-    try {
-      const data = JSON.parse(e.target.result);
-      state = { ...state, ...data };
-      document.getElementById('tripTitle').value = state.title || '';
-      document.getElementById('tripStartDate').value = state.startDate || '';
-      document.getElementById('tripDays').value = state.days || 3;
-      updateNavTitle();
-      renderDayTabs();
-      renderSchedule();
-      saveState();
-      alert('데이터를 불러왔습니다.');
-    } catch(err) {
-      alert('올바른 JSON 파일이 아닙니다.');
-    }
-  };
-  reader.readAsText(file);
-  event.target.value = '';
-}
-
-function clearAllData() {
-  if (!confirm('모든 데이터를 초기화하시겠습니까?')) return;
-  localStorage.removeItem('travelPlannerState');
-  state = {
-    title: '', startDate: '', days: 3, currentDay: 0,
-    schedules: {}, mode: 'input', view: 'timetable'
-  };
-  for (let i = 0; i < state.days; i++) {
-    state.schedules[i] = [createEmptyRow()];
-  }
-  document.getElementById('tripTitle').value = '';
-  document.getElementById('tripStartDate').value = '';
-  document.getElementById('tripDays').value = 3;
-  updateNavTitle();
-  renderDayTabs();
-  renderSchedule();
-}
+// ===== (기존 JSON 내보내기/불러오기 제거 - 여행 목록으로 대체) =====
 
 // ===== BOOT =====
 init();
