@@ -517,6 +517,68 @@ body {
   background: #fde8e8;
 }
 
+/* ── 지도 좌표 선택 모달 ── */
+.map-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 2000;
+  align-items: flex-end;
+  justify-content: center;
+}
+.map-modal-overlay.show { display: flex; }
+.map-modal {
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 600px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.map-modal-header {
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+}
+.map-modal-header h3 { font-size: 15px; font-weight: 700; }
+.map-modal-header .close-btn {
+  width: 32px; height: 32px; border: none; background: #f0f0f0;
+  border-radius: 50%; font-size: 18px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.map-modal-body { flex: 1; }
+#pickerMap { width: 100%; height: 50vh; min-height: 300px; }
+.map-modal-footer {
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-top: 1px solid #eee;
+  gap: 10px;
+}
+.map-modal-footer .coords {
+  font-size: 13px; color: var(--text-light);
+}
+.map-modal-footer .coords b { color: var(--text); }
+.btn-confirm-coord {
+  padding: 10px 24px; border: none; border-radius: 10px;
+  background: var(--day1); color: #fff;
+  font-family: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer;
+}
+.btn-pick-map {
+  width: 28px; height: 28px; border: 1.5px solid var(--border);
+  border-radius: 6px; background: #fff; cursor: pointer;
+  font-size: 14px; display: flex; align-items: center;
+  justify-content: center; flex-shrink: 0; padding: 0;
+}
+.btn-pick-map:hover { border-color: var(--day1); background: #f0f7ff; }
+
 /* ── 여행 목록 화면 ── */
 .trip-list-screen {
   padding: 20px 16px 100px;
@@ -1018,7 +1080,7 @@ function renderSchedule() {
         </select>
       </td>
       <td class="col-link"><input type="url" value="${esc(row.link)}" placeholder="https://..." data-field="link" data-idx="${idx}" onchange="onCellChange(this)"></td>
-      <td class="col-lat"><input type="number" step="any" value="${row.lat}" placeholder="33.xxx" data-field="lat" data-idx="${idx}" onchange="onCellChange(this)"></td>
+      <td class="col-lat"><div style="display:flex;gap:2px;align-items:center"><input type="number" step="any" value="${row.lat}" placeholder="33.xxx" data-field="lat" data-idx="${idx}" onchange="onCellChange(this)" style="flex:1;min-width:0"><button class="btn-pick-map" onclick="openMapPicker(${idx})" title="지도에서 선택">📍</button></div></td>
       <td class="col-lng"><input type="number" step="any" value="${row.lng}" placeholder="126.xxx" data-field="lng" data-idx="${idx}" onchange="onCellChange(this)"></td>
       <td class="col-actions">
         <div class="row-actions">
@@ -1269,10 +1331,101 @@ function renderMapLegend(points) {
   });
 }
 
-// ===== (기존 JSON 내보내기/불러오기 제거 - 여행 목록으로 대체) =====
+// ===== 지도 좌표 선택 =====
+let pickerMap = null;
+let pickerMarker = null;
+let pickerTargetIdx = null;
+let pickedLat = null;
+let pickedLng = null;
+
+function openMapPicker(idx) {
+  pickerTargetIdx = idx;
+  const rows = state.schedules[state.currentDay] || [];
+  const row = rows[idx];
+
+  const overlay = document.getElementById('mapPickerOverlay');
+  overlay.classList.add('show');
+
+  // 기존 좌표가 있으면 그 위치로, 없으면 제주도 중심
+  const initLat = parseFloat(row?.lat) || 33.38;
+  const initLng = parseFloat(row?.lng) || 126.55;
+  const initZoom = (row?.lat && row?.lng) ? 15 : 11;
+
+  pickedLat = parseFloat(row?.lat) || null;
+  pickedLng = parseFloat(row?.lng) || null;
+  updatePickerCoords();
+
+  setTimeout(() => {
+    if (pickerMap) { pickerMap.remove(); pickerMap = null; }
+    pickerMap = L.map('pickerMap').setView([initLat, initLng], initZoom);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, subdomains: 'abcd'
+    }).addTo(pickerMap);
+
+    if (pickedLat && pickedLng) {
+      pickerMarker = L.marker([pickedLat, pickedLng]).addTo(pickerMap);
+    }
+
+    pickerMap.on('click', function(e) {
+      pickedLat = Math.round(e.latlng.lat * 10000) / 10000;
+      pickedLng = Math.round(e.latlng.lng * 10000) / 10000;
+      if (pickerMarker) pickerMap.removeLayer(pickerMarker);
+      pickerMarker = L.marker([pickedLat, pickedLng]).addTo(pickerMap);
+      updatePickerCoords();
+    });
+  }, 100);
+}
+
+function updatePickerCoords() {
+  const el = document.getElementById('pickerCoords');
+  if (pickedLat && pickedLng) {
+    el.innerHTML = '<b>' + pickedLat + '</b>, <b>' + pickedLng + '</b>';
+  } else {
+    el.innerHTML = '지도를 탭하세요';
+  }
+}
+
+function confirmMapPicker() {
+  if (pickedLat && pickedLng && pickerTargetIdx !== null) {
+    const rows = state.schedules[state.currentDay];
+    if (rows[pickerTargetIdx]) {
+      rows[pickerTargetIdx].lat = pickedLat;
+      rows[pickerTargetIdx].lng = pickedLng;
+      saveState();
+      renderSchedule();
+    }
+  }
+  closeMapPicker();
+}
+
+function closeMapPicker() {
+  document.getElementById('mapPickerOverlay').classList.remove('show');
+  if (pickerMap) { pickerMap.remove(); pickerMap = null; }
+  pickerMarker = null;
+  pickerTargetIdx = null;
+}
 
 // ===== BOOT =====
 init();
+</script>
+
+<!-- 지도 좌표 선택 모달 -->
+<div class="map-modal-overlay" id="mapPickerOverlay" onclick="if(event.target===this)closeMapPicker()">
+  <div class="map-modal">
+    <div class="map-modal-header">
+      <h3>📍 지도에서 위치 선택</h3>
+      <button class="close-btn" onclick="closeMapPicker()">✕</button>
+    </div>
+    <div class="map-modal-body">
+      <div id="pickerMap"></div>
+    </div>
+    <div class="map-modal-footer">
+      <div class="coords" id="pickerCoords">지도를 탭하세요</div>
+      <button class="btn-confirm-coord" onclick="confirmMapPicker()">확인</button>
+    </div>
+  </div>
+</div>
+<script>// placeholder
 </script>
 </body>
 </html>
